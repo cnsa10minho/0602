@@ -51,9 +51,8 @@
 
     <h1>📐 벡터 미로 탈출 게임</h1>
     <div id="instructions">
-        <strong>기본 벡터:</strong> 항상 오른쪽(+x 방향, 크기 40)<br>
-        <strong>1단계:</strong> 회전하는 화살표가 있을 때 <strong>[스페이스바]</strong>를 눌러 두 벡터의 <strong>합성 방향</strong>을 결정하세요.<br>
-        <strong>2단계:</strong> 화살표가 앞뒤로 움직일 때 <strong>[스페이스바]</strong>를 한 번 더 눌러 <strong>벡터의 크기(길이)</strong>를 결정하여 공을 움직이세요!
+        <strong>1단계:</strong> 회전하는 화살표를 보고 원하는 각도에서 <strong>[스페이스바]</strong>를 누르세요.<br>
+        <strong>2단계:</strong> 기본(+x축) 벡터와 내가 고른 벡터가 <strong>합성된 주황색 화살표</strong>의 크기가 변합니다. <strong>[스페이스바]</strong>로 크기를 결정하세요!
     </div>
 
     <div id="gameContainer">
@@ -81,15 +80,14 @@ let ball = {
     speed: 3
 };
 
-// 미로 벽 데이터 (rectangles)
+// 미로 벽 데이터
 const walls = [
-    // 외곽 벽은 캔버스 테두리로 대체하고, 내부 미로 배치
     {x: 0, y: 0, w: 800, h: 20},
     {x: 0, y: 580, w: 800, h: 20},
     {x: 0, y: 0, w: 20, h: 600},
     {x: 780, y: 0, w: 20, h: 600},
     
-    // 내부 미로 벽들
+    // 내부 미로 벽
     {x: 150, y: 0, w: 30, h: 450},
     {x: 300, y: 150, w: 30, h: 450},
     {x: 450, y: 0, w: 30, h: 450},
@@ -101,34 +99,40 @@ const walls = [
 const goal = { x: 700, y: 70, w: 50, h: 50 };
 
 // 벡터 관련 변수
-const baseVectorLength = 40; // 기본 +x축 벡터 크기
-let rotationAngle = 0; // 회전하는 화살표의 각도
+const baseVectorLength = 50; // 기본 벡터 및 회전 벡터의 기준 크기
+let rotationAngle = 0;       // 회전하는 화살표의 각도
 let rotationSpeed = 0.04;
+let savedRotationAngle = 0;  // 1단계에서 멈춘 각도 저장
 
-let finalAngle = 0; // 합성된 벡터의 방향 각도
-let currentMagnitude = 50; // 현재 조절 중인 벡터 크기
-let magnitudeDelta = 2; // 크기 변화 속도
-let maxMagnitude = 150;
-let minMagnitude = 10;
+let finalAngle = 0;          // 두 벡터가 합성된 최종 방향 각도
+let currentMagnitude = 50;   // 현재 조절 중인 합성 벡터의 크기(길이)
+let magnitudeDelta = 2;      // 크기 변화 속도
+let maxMagnitude = 160;
+let minMagnitude = 15;
 
 // 입력 처리
 window.addEventListener('keydown', function(e) {
     if (e.code === 'Space') {
-        e.preventDefault(); // 스페이스바 스크롤 방지
+        e.preventDefault(); 
         
         if (gameState === 0) {
-            // 1단계 완료 -> 합성 벡터 각도 고정 및 크기 조절 단계로 변경
-            let baseVx = baseVectorLength;
+            // 1단계 완료 -> 각도 고정
+            savedRotationAngle = rotationAngle;
+            
+            // 합성 벡터의 방향(각도) 계산
+            let baseVx = baseVectorLength; // +x축 방향 (방향 0)
             let baseVy = 0;
-            let rotVx = Math.cos(rotationAngle) * baseVectorLength;
-            let rotVy = Math.sin(rotationAngle) * baseVectorLength;
+            let rotVx = Math.cos(savedRotationAngle) * baseVectorLength;
+            let rotVy = Math.sin(savedRotationAngle) * baseVectorLength;
             
             let sumX = baseVx + rotVx;
             let sumY = baseVy + rotVy;
             
-            finalAngle = Math.atan2(sumY, sumX); // 합성 벡터의 최종 각도 계산
+            finalAngle = Math.atan2(sumY, sumX); // 합성된 주황색 화살표가 가리킬 최종 각도
+            currentMagnitude = Math.sqrt(sumX*sumX + sumY*sumY); // 초기 크기는 두 벡터의 기본 합산 크기로 시작
+            
             gameState = 1;
-            statusDiv.innerText = "상태: 크기 결정 중... [스페이스바를 누르세요]";
+            statusDiv.innerText = "상태: 합성 벡터 크기 결정 중... [스페이스바를 누르세요]";
         } 
         else if (gameState === 1) {
             // 2단계 완료 -> 공 이동 시작
@@ -138,7 +142,6 @@ window.addEventListener('keydown', function(e) {
             statusDiv.innerText = "상태: 이동 중...";
         }
         else if (gameState === 3 || gameState === 4) {
-            // 재시작
             resetGame();
         }
     }
@@ -150,24 +153,19 @@ function resetGame() {
     ball.targetX = 60;
     ball.targetY = 70;
     gameState = 0;
-    currentMagnitude = 50;
+    rotationAngle = 0;
     statusDiv.innerText = "상태: 방향 결정 중... [스페이스바를 누르세요]";
     statusDiv.style.color = "#2c3e50";
 }
 
-// 충돌 체크 함수 (원과 사각형)
 function checkCollision(circle, rect) {
     let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.w));
     let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.h));
-    
     let distanceX = circle.x - closestX;
     let distanceY = circle.y - closestY;
-    
-    let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
-    return distanceSquared < (circle.radius * circle.radius);
+    return (distanceX * distanceX + distanceY * distanceY) < (circle.radius * circle.radius);
 }
 
-// 화살표 그리기 유틸리티
 function drawArrow(fromX, fromY, toX, toY, color, width = 3) {
     let headLength = 10;
     let angle = Math.atan2(toY - fromY, toX - fromX);
@@ -189,20 +187,17 @@ function drawArrow(fromX, fromY, toX, toY, color, width = 3) {
 
 // 메인 루프
 function update() {
-    // 1. 논리 업데이트
+    // 1. 상태 업데이트
     if (gameState === 0) {
-        // 회전 각도 업데이트
         rotationAngle += rotationSpeed;
     } 
     else if (gameState === 1) {
-        // 크기 진동 업데이트 (왔다갔다)
         currentMagnitude += magnitudeDelta;
         if (currentMagnitude > maxMagnitude || currentMagnitude < minMagnitude) {
             magnitudeDelta = -magnitudeDelta;
         }
     } 
     else if (gameState === 2) {
-        // 공 이동 구현 (목표 지점까지 스무스하게 이동)
         let dx = ball.targetX - ball.x;
         let dy = ball.targetY - ball.y;
         let dist = Math.sqrt(dx * dx + dy * dy);
@@ -211,7 +206,6 @@ function update() {
             ball.x += (dx / dist) * ball.speed;
             ball.y += (dy / dist) * ball.speed;
             
-            // 이동 중 벽 충돌 검사
             for (let wall of walls) {
                 if (checkCollision(ball, wall)) {
                     gameState = 3;
@@ -221,14 +215,12 @@ function update() {
                 }
             }
             
-            // 골인 검사
             if (checkCollision(ball, goal)) {
                 gameState = 4;
                 statusDiv.innerText = "🎉 축하합니다! 탈출 성공! [스페이스바]를 눌러 재시작";
                 statusDiv.style.color = "green";
             }
         } else {
-            // 목적지 도착 후 다시 입력 상태로 전환
             ball.x = ball.targetX;
             ball.y = ball.targetY;
             gameState = 0;
@@ -236,23 +228,19 @@ function update() {
         }
     }
 
-    // 2. 그래픽 렌더링
+    // 2. 렌더링
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 미로 벽 그리기
+    // 미로 벽 및 골인 지점
     ctx.fillStyle = '#34495e';
-    for (let wall of walls) {
-        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
-    }
-
-    // 골인 지점 그리기
+    for (let wall of walls) ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
     ctx.fillStyle = '#2ecc71';
     ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px sans-serif';
     ctx.fillText('GOAL', goal.x + 6, goal.y + 30);
 
-    // 플레이어 공 그리기
+    // 플레이어 공
     ctx.fillStyle = '#3498db';
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
@@ -261,43 +249,49 @@ function update() {
     ctx.strokeStyle = '#2980b9';
     ctx.stroke();
 
-    // 벡터 화살표 시각화 (준비 상태일 때만)
+    // 벡터 시각화 파트
     if (gameState === 0) {
-        // 기본 벡터 (+x축 고정) - 빨간색
-        drawArrow(ball.x, ball.y, ball.x + baseVectorLength, ball.y, '#e74c3c', 2);
-        
-        // 회전하는 변동 벡터 - 파란색
+        // [1단계] 오직 회전하는 화살표 하나만 표시 (보라색)
         let rotX = ball.x + Math.cos(rotationAngle) * baseVectorLength;
         let rotY = ball.y + Math.sin(rotationAngle) * baseVectorLength;
-        drawArrow(ball.x, ball.y, rotX, rotY, '#9b59b6', 2);
-        
-        // 평행사변형 법에 따른 두 벡터의 합(합성 벡터) - 주황색 두껍게
-        let sumX = ball.x + baseVectorLength + Math.cos(rotationAngle) * baseVectorLength;
-        let sumY = ball.y + Math.sin(rotationAngle) * baseVectorLength;
-        drawArrow(ball.x, ball.y, sumX, sumY, '#f39c12', 4);
-        
-        // 시각적 이해를 돕기 위한 보조 점선 (평행사변형 완성선)
-        ctx.strokeStyle = '#aaa';
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(ball.x + baseVectorLength, ball.y);
-        ctx.lineTo(sumX, sumY);
-        ctx.moveTo(rotX, rotY);
-        ctx.lineTo(sumX, sumY);
-        ctx.stroke();
-        ctx.setLineDash([]); // 점선 리셋
+        drawArrow(ball.x, ball.y, rotX, rotY, '#9b59b6', 3);
     } 
     else if (gameState === 1) {
-        // 결정된 방향으로 크기 조절 상태 표시
+        // [2단계] 사용자가 스페이스바를 누른 후 계산 연출 시작
+        
+        // 1. 고정된 기본 +x축 벡터 표시 (빨간색)
+        drawArrow(ball.x, ball.y, ball.x + baseVectorLength, ball.y, '#e74c3c', 2);
+        
+        // 2. 사용자가 선택해서 멈춘 벡터 표시 (보라색 고정)
+        let rotX = ball.x + Math.cos(savedRotationAngle) * baseVectorLength;
+        let rotY = ball.y + Math.sin(savedRotationAngle) * baseVectorLength;
+        drawArrow(ball.x, ball.y, rotX, rotY, '#9b59b6', 2);
+        
+        // 3. 실시간으로 늘어났다 줄어드는 '최종 합성 벡터' 표시 (주황색 두껍게)
         let targetX = ball.x + Math.cos(finalAngle) * currentMagnitude;
         let targetY = ball.y + Math.sin(finalAngle) * currentMagnitude;
-        drawArrow(ball.x, ball.y, targetX, targetY, '#e67e22', 4);
+        drawArrow(ball.x, ball.y, targetX, targetY, '#f39c12', 4);
+
+        // 4. 평행사변형 관계를 보여주기 위한 보조 점선 (현재 크기에 비례하여 매칭)
+        // 합성 벡터의 끝점에서 각 원래 벡터 성분으로 평행하게 선을 그려줌
+        let scale = currentMagnitude / (baseVectorLength * 2 * Math.cos((savedRotationAngle)/2)); 
+        // 학생들이 직관적으로 볼 수 있게 합성 벡터 가이드 점선만 추가
+        ctx.strokeStyle = '#bdc3c7';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        // 기본 벡터 끝 추정치와 합성 벡터 끝 연결
+        ctx.moveTo(ball.x + baseVectorLength, ball.y);
+        ctx.lineTo(targetX, targetY);
+        // 회전 벡터 끝 추정치와 합성 벡터 끝 연결
+        ctx.moveTo(rotX, rotY);
+        ctx.lineTo(targetX, targetY);
+        ctx.stroke();
+        ctx.setLineDash([]);
     }
 
     requestAnimationFrame(update);
 }
 
-// 게임 시작
 update();
 </script>
 
